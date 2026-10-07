@@ -2,7 +2,7 @@
 
 **Gestão financeira em uma aplicação web: receitas, despesas, cartões, parcelamentos e relatórios em um só lugar.**
 
-[Acessar aplicação](https://financeflow-cyan.vercel.app) · [Perfil do desenvolvedor](https://github.com/11guigamartins-cloud)
+[Acessar aplicação](https://financeflow-cyan.vercel.app) · [Mais projetos](https://github.com/11guigamartins-cloud)
 
 ## O projeto
 
@@ -73,4 +73,4 @@ supabase/
 
 ## Autor
 
-Desenvolvido por **[André Guilherme](https://github.com/11guigamartins-cloud)**.
+**[André Guilherme](https://github.com/11guigamartins-cloud)**.
