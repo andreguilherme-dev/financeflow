@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useReducer, useState } from 'react'
 import type {
   AppState, Card, Transaction, Bill, User, BankAccount, Income,
-  BillPayment, InvoicePayment, Boleto,
+  BillPayment, InvoicePayment, Boleto, PluggyItem,
 } from '../types'
 import { supabase } from '../lib/supabase'
 import {
@@ -9,13 +9,14 @@ import {
   toCard, toBankAccount, toTransaction, toIncome, toBill,
   toBillPayment, toInvoicePayment, toBoleto,
   fromCard, fromBankAccount, fromTransaction, fromIncome, fromBill,
-  fromBillPayment, fromInvoicePayment, fromBoleto,
+  fromBillPayment, fromInvoicePayment, fromBoleto, fromPluggyItem,
 } from '../lib/db'
 import { useAuth } from './AuthContext'
 
 const EMPTY: AppState = {
   users: [], cards: [], bankAccounts: [], transactions: [],
   incomes: [], bills: [], billPayments: [], invoicePayments: [], boletos: [],
+  pluggyItems: [],
   activeUserId: null,
 }
 
@@ -47,6 +48,8 @@ type Action =
   | { type: 'ADD_BOLETO'; boleto: Boleto }
   | { type: 'UPDATE_BOLETO'; boleto: Boleto }
   | { type: 'DELETE_BOLETO'; boletoId: string }
+  | { type: 'UPSERT_PLUGGY_ITEM'; item: PluggyItem }
+  | { type: 'DELETE_PLUGGY_ITEM'; pluggyItemId: string }
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
@@ -131,6 +134,18 @@ function reducer(state: AppState, action: Action): AppState {
     case 'DELETE_BOLETO':
       return { ...state, boletos: state.boletos.filter((b) => b.id !== action.boletoId) }
 
+    case 'UPSERT_PLUGGY_ITEM': {
+      const exists = state.pluggyItems.find((p) => p.id === action.item.id)
+      return {
+        ...state,
+        pluggyItems: exists
+          ? state.pluggyItems.map((p) => p.id === action.item.id ? action.item : p)
+          : [...state.pluggyItems, action.item],
+      }
+    }
+    case 'DELETE_PLUGGY_ITEM':
+      return { ...state, pluggyItems: state.pluggyItems.filter((p) => p.pluggyItemId !== action.pluggyItemId) }
+
     default: return state
   }
 }
@@ -166,6 +181,7 @@ type PublicAction =
 interface FinanceContextValue {
   state: AppState
   dispatch: (a: PublicAction) => void
+  reload: () => void
   ready: boolean
   activeUser: User | undefined
   getUserCards: (userId: string) => Card[]
@@ -191,9 +207,12 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth()
   const [state, dispatchInternal] = useReducer(reducer, EMPTY)
   const [ready, setReady] = useState(false)
+  const [reloadKey, setReloadKey] = useState(0)
   const householdId = profile?.household_id
 
-  // Carrega dados quando o usuário loga / muda
+  function reload() { setReloadKey((k) => k + 1) }
+
+  // Carrega dados quando o usuário loga / muda / reload() é chamado
   useEffect(() => {
     if (!householdId) {
       dispatchInternal({ type: 'INIT', data: { ...EMPTY } })
@@ -207,7 +226,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       if (profile) dispatchInternal({ type: 'SET_ACTIVE_USER', userId: profile.id })
       setReady(true)
     })
-  }, [householdId, profile?.id])
+  }, [householdId, profile?.id, reloadKey])
 
   // ─── dispatch async wrapper ────────────────────────────────────────────────
   function dispatch(a: PublicAction) {
@@ -480,7 +499,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <FinanceContext.Provider value={{
-      state, dispatch, ready, activeUser,
+      state, dispatch, reload, ready, activeUser,
       getUserCards, getCardById, getUserById,
       getBankAccountById, getUserBankAccounts, getTotalBankBalance,
       getTransactionsForMonth, getInstallmentTransactions,

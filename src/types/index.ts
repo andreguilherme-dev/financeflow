@@ -175,6 +175,19 @@ export interface Boleto {
   note?: string
 }
 
+// ─── Pluggy (Open Finance) ────────────────────────────────────────────────────
+
+export interface PluggyItem {
+  id: string
+  householdId: string
+  userId: string
+  pluggyItemId: string
+  connectorName?: string
+  status: string
+  lastSyncedAt?: string
+  createdAt: string
+}
+
 // ─── Summary helpers ──────────────────────────────────────────────────────────
 
 export interface AppState {
@@ -187,5 +200,6 @@ export interface AppState {
   billPayments: BillPayment[]
   invoicePayments: InvoicePayment[]
   boletos: Boleto[]
+  pluggyItems: PluggyItem[]
   activeUserId: string | null
 }

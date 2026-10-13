@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 import type {
   Card, BankAccount, Transaction, Income, Bill,
-  BillPayment, InvoicePayment, Boleto, User,
+  BillPayment, InvoicePayment, Boleto, User, PluggyItem,
 } from '../types'
 
 // ════════════════════════════════════════════════════════════════════
@@ -134,12 +134,24 @@ export const toBoleto = (b: Omit<Boleto, 'id'>) => ({
   bank_account_id: b.bankAccountId ?? null, note: b.note ?? null,
 })
 
+// ─── PluggyItem ────────────────────────────────────────────────────────────────
+export const fromPluggyItem = (r: any): PluggyItem => ({
+  id: r.id,
+  householdId: r.household_id,
+  userId: r.user_id,
+  pluggyItemId: r.pluggy_item_id,
+  connectorName: r.connector_name ?? undefined,
+  status: r.status,
+  lastSyncedAt: r.last_synced_at ?? undefined,
+  createdAt: r.created_at,
+})
+
 // ════════════════════════════════════════════════════════════════════
 // Bulk loader — fetch all data for the current household
 // ════════════════════════════════════════════════════════════════════
 
 export async function loadAllData(householdId: string) {
-  const [users, cards, accounts, transactions, incomes, bills, billPayments, invoicePayments, boletos] = await Promise.all([
+  const [users, cards, accounts, transactions, incomes, bills, billPayments, invoicePayments, boletos, pluggyItems] = await Promise.all([
     supabase.from('profiles').select('*').eq('household_id', householdId),
     supabase.from('cards').select('*').eq('household_id', householdId),
     supabase.from('bank_accounts').select('*').eq('household_id', householdId),
@@ -149,6 +161,7 @@ export async function loadAllData(householdId: string) {
     supabase.from('bill_payments').select('*').eq('household_id', householdId),
     supabase.from('invoice_payments').select('*').eq('household_id', householdId),
     supabase.from('boletos').select('*').eq('household_id', householdId).order('due_date'),
+    supabase.from('pluggy_items').select('*').eq('household_id', householdId).order('created_at', { ascending: false }),
   ])
 
   return {
@@ -161,5 +174,6 @@ export async function loadAllData(householdId: string) {
     billPayments:    (billPayments.data ?? []).map(fromBillPayment),
     invoicePayments: (invoicePayments.data ?? []).map(fromInvoicePayment),
     boletos:         (boletos.data ?? []).map(fromBoleto),
+    pluggyItems:     (pluggyItems.data ?? []).map(fromPluggyItem),
   }
 }

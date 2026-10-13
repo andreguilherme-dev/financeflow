@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Plus, Edit2, Trash2, TrendingDown, Landmark, RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, Clock } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { Plus, Edit2, Trash2, TrendingDown, Landmark, RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, Clock, Wifi, WifiOff, Zap } from 'lucide-react'
 import { addMonths, subMonths, format as dateFnsFormat } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Layout } from '../components/layout/Layout'
@@ -15,6 +15,9 @@ import {
 import type { Card, BankAccount } from '../types'
 import { Modal } from '../components/ui/Modal'
 import { Input } from '../components/ui/FormField'
+import { PluggyConnect } from 'react-pluggy-connect'
+import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 const TOOLTIP_STYLE = {
   backgroundColor: '#1e293b',
@@ -60,7 +63,8 @@ function UpdateBalanceModal({ account, onClose }: { account: BankAccount; onClos
 }
 
 export function Cards() {
-  const { state, dispatch, getCardUsageForMonth, getTotalBankBalance, getInvoicePayment } = useFinance()
+  const { state, dispatch, reload, getCardUsageForMonth, getTotalBankBalance, getInvoicePayment } = useFinance()
+  const { profile } = useAuth()
   const [cardModalOpen, setCardModalOpen] = useState(false)
   const [editCard, setEditCard] = useState<Card | undefined>()
   const [selectedCard, setSelectedCard] = useState<string | null>(null)
@@ -68,6 +72,71 @@ export function Cards() {
   const [accModalOpen, setAccModalOpen] = useState(false)
   const [editAcc, setEditAcc] = useState<BankAccount | undefined>()
   const [updateBalAcc, setUpdateBalAcc] = useState<BankAccount | undefined>()
+
+  // ── Pluggy / Open Finance ──────────────────────────────────────────────────
+  const [connectToken, setConnectToken] = useState<string | null>(null)
+  const [pluggyLoading, setPluggyLoading] = useState(false)
+  const [syncingItemId, setSyncingItemId] = useState<string | null>(null)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+
+  const handleOpenPluggy = useCallback(async () => {
+    setPluggyLoading(true)
+    setSyncMsg(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('pluggy-token', {
+        body: { clientUserId: profile?.id },
+      })
+      if (error) throw error
+      setConnectToken(data.accessToken)
+    } catch (err: any) {
+      setSyncMsg('Erro ao iniciar conexão: ' + (err?.message ?? String(err)))
+    } finally {
+      setPluggyLoading(false)
+    }
+  }, [profile?.id])
+
+  const handlePluggySuccess = useCallback(async (itemData: any) => {
+    setConnectToken(null)
+    const pluggyItemId = itemData?.item?.id
+    if (!pluggyItemId) return
+    setSyncingItemId(pluggyItemId)
+    setSyncMsg('Sincronizando transações...')
+    try {
+      const { data, error } = await supabase.functions.invoke('pluggy-sync', {
+        body: { pluggyItemId },
+      })
+      if (error) throw error
+      setSyncMsg(`✅ ${data.imported} transações importadas de ${data.accountsLinked} conta(s)`)
+      reload()
+    } catch (err: any) {
+      setSyncMsg('Erro na sincronização: ' + (err?.message ?? String(err)))
+    } finally {
+      setSyncingItemId(null)
+    }
+  }, [reload])
+
+  const handleSync = useCallback(async (pluggyItemId: string) => {
+    setSyncingItemId(pluggyItemId)
+    setSyncMsg('Sincronizando...')
+    try {
+      const { data, error } = await supabase.functions.invoke('pluggy-sync', {
+        body: { pluggyItemId },
+      })
+      if (error) throw error
+      setSyncMsg(`✅ ${data.imported} transações importadas`)
+      reload()
+    } catch (err: any) {
+      setSyncMsg('Erro: ' + (err?.message ?? String(err)))
+    } finally {
+      setSyncingItemId(null)
+    }
+  }, [reload])
+
+  const handleDisconnect = useCallback(async (itemId: string, pluggyItemId: string) => {
+    if (!confirm('Desconectar este banco? As transações já importadas serão mantidas.')) return
+    await supabase.from('pluggy_items').delete().eq('id', itemId)
+    reload()
+  }, [reload])
 
   const userId = state.activeUserId || undefined
   const currentMonth = format(new Date(), 'yyyy-MM')
@@ -440,7 +509,95 @@ export function Cards() {
           )}
         </div>
 
+        {/* ── Open Finance / Pluggy ─────────────────────────────────────── */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="font-semibold text-white flex items-center gap-2">
+                <Wifi className="w-4 h-4 text-brand-400" /> Open Finance
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">Conecte seu banco e importe transações automaticamente</p>
+            </div>
+            <button
+              onClick={handleOpenPluggy}
+              disabled={pluggyLoading || !!connectToken}
+              className="flex items-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-colors">
+              {pluggyLoading ? (
+                <><div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Aguarde...</>
+              ) : (
+                <><Zap className="w-4 h-4" /> Conectar banco</>
+              )}
+            </button>
+          </div>
+
+          {syncMsg && (
+            <div className={`mb-4 px-4 py-3 rounded-xl text-sm ${syncMsg.startsWith('✅') ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+              {syncMsg}
+            </div>
+          )}
+
+          {state.pluggyItems.length === 0 ? (
+            <div className="bg-surface-900 border border-dashed border-white/20 rounded-2xl p-8 text-center">
+              <WifiOff className="w-8 h-8 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-400 text-sm mb-1">Nenhum banco conectado</p>
+              <p className="text-slate-600 text-xs">Conecte seu banco para importar transações via Open Finance Brasil</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {state.pluggyItems.map((item) => {
+                const isSyncing = syncingItemId === item.pluggyItemId
+                return (
+                  <div key={item.id} className="bg-surface-900 border border-white/10 rounded-2xl p-5 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 right-0 h-1 rounded-t-2xl bg-brand-500" />
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="w-10 h-10 rounded-xl bg-brand-500/20 flex items-center justify-center">
+                        <Wifi className="w-5 h-5 text-brand-400" />
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.status === 'UPDATED' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                          {item.status === 'UPDATED' ? 'Conectado' : item.status}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="font-semibold text-white">{item.connectorName ?? 'Banco'}</p>
+                    {item.lastSyncedAt && (
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Sincronizado em {new Date(item.lastSyncedAt).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    )}
+                    <div className="flex gap-2 mt-4">
+                      <button
+                        onClick={() => handleSync(item.pluggyItemId)}
+                        disabled={isSyncing}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-brand-500/20 hover:bg-brand-500/30 disabled:opacity-50 text-brand-400 rounded-xl text-xs font-medium transition-colors">
+                        {isSyncing
+                          ? <><div className="w-3 h-3 border border-brand-400/40 border-t-brand-400 rounded-full animate-spin" /> Sincronizando</>
+                          : <><RefreshCw className="w-3 h-3" /> Sincronizar</>}
+                      </button>
+                      <button
+                        onClick={() => handleDisconnect(item.id, item.pluggyItemId)}
+                        className="p-2 rounded-xl hover:bg-red-500/20 transition-colors">
+                        <WifiOff className="w-3.5 h-3.5 text-red-400" />
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
+
+      {connectToken && (
+        <PluggyConnect
+          connectToken={connectToken}
+          includeSandbox={false}
+          onSuccess={handlePluggySuccess}
+          onClose={() => setConnectToken(null)}
+          onError={(err) => { setSyncMsg('Erro na conexão: ' + String(err)); setConnectToken(null) }}
+        />
+      )}
 
       <CardModal key={editCard?.id ?? 'new-card'} isOpen={cardModalOpen} onClose={() => { setCardModalOpen(false); setEditCard(undefined) }} card={editCard} />
       <BankAccountModal key={editAcc?.id ?? 'new-acc'} isOpen={accModalOpen} onClose={() => { setAccModalOpen(false); setEditAcc(undefined) }} account={editAcc} />

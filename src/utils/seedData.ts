@@ -181,4 +181,5 @@ export const SEED: AppState = {
   billPayments: [],
   invoicePayments: [],
   boletos: [],
+  pluggyItems: [],
 }
