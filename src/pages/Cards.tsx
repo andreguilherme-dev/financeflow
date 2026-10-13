@@ -108,8 +108,8 @@ export function Cards() {
         return [...state.transactions]
           .filter((t) => {
             if (t.cardId !== selectedCard) return false
-            const d = new Date(t.date)
-            return d.getFullYear() === y && d.getMonth() + 1 === m
+            const [ty, tm] = t.date.split('-').map(Number)
+            return ty === y && tm === m
           })
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       })()
@@ -290,6 +290,20 @@ export function Cards() {
                         <span className="text-xs font-medium text-white">{formatCurrency(t.amount)}</span>
                       </div>
                     ))}
+                    {(() => {
+                      const txTotal = detailTxns.reduce((s, t) => s + t.amount, 0)
+                      const billTotal = detailBills.reduce((s, b) => s + b.amount, 0)
+                      const projected = Math.round(selectedUsage - txTotal - billTotal)
+                      return projected > 0 ? (
+                        <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+                          <div>
+                            <p className="text-xs text-white">Parcelas projetadas</p>
+                            <p className="text-xs text-slate-500">futuras ainda não registradas</p>
+                          </div>
+                          <span className="text-xs font-medium text-brand-400">{formatCurrency(projected)}</span>
+                        </div>
+                      ) : null
+                    })()}
                     {detailTxns.length === 0 && detailBills.length === 0 && (
                       <p className="text-xs text-slate-500">Nenhum gasto neste mês</p>
                     )}

@@ -616,7 +616,7 @@ export function Payments() {
                     const due = parseISO(boleto.dueDate)
                     const isOverdue = !boleto.isPaid && due < new Date()
                     return (
-                      <div key={boleto.id} className={`flex items-center gap-4 px-5 py-4 transition-colors ${boleto.isPaid ? 'opacity-60' : 'hover:bg-white/5'}`}>
+                      <div key={boleto.id} className={`group flex items-center gap-4 px-5 py-4 transition-colors ${boleto.isPaid ? 'opacity-60' : 'hover:bg-white/5'}`}>
                         <button onClick={() => handleBoletoToggle(boleto)} className="shrink-0">
                           {boleto.isPaid
                             ? <CheckCircle2 className="w-5 h-5 text-emerald-400" />

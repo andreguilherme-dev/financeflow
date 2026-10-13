@@ -376,8 +376,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const getTransactionsForMonth = (monthKey: string, userId?: string) => {
     const [y, m] = monthKey.split('-').map(Number)
     return state.transactions.filter((t) => {
-      const d = new Date(t.date)
-      const matches = d.getFullYear() === y && d.getMonth() + 1 === m
+      const [ty, tm] = t.date.split('-').map(Number)
+      const matches = ty === y && tm === m
       return userId ? matches && t.userId === userId : matches
     })
   }
@@ -389,15 +389,18 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     getTransactionsForMonth(monthKey, userId).reduce((sum, t) => sum + t.amount, 0)
 
   // Comprehensive monthly spending: non-credit transactions + card invoices + direct bills
-  // Avoids double-counting: credit card purchases appear only in invoiceTotal (via getCardUsageForMonth)
+  // Avoids double-counting: all transactions on credit/both cards appear only in invoiceTotal
   const getTotalSpendingForMonth = (monthKey: string, userId?: string): number => {
     const [y, m] = monthKey.split('-').map(Number)
+    const creditCardIds = new Set(
+      state.cards.filter((c) => c.type === 'credit' || c.type === 'both').map((c) => c.id)
+    )
     const directTxTotal = state.transactions
       .filter((t) => {
         if (userId && t.userId !== userId) return false
-        const d = new Date(t.date)
-        if (d.getFullYear() !== y || d.getMonth() + 1 !== m) return false
-        return !(t.cardId && t.paymentMethod === 'credit')
+        const [ty, tm] = t.date.split('-').map(Number)
+        if (ty !== y || tm !== m) return false
+        return !creditCardIds.has(t.cardId ?? '')
       })
       .reduce((s, t) => s + t.amount, 0)
     const directBillTotal = state.bills
@@ -414,8 +417,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     const [y, m] = monthKey.split('-').map(Number)
     const txTotal = state.transactions
       .filter((t) => {
-        const d = new Date(t.date)
-        return t.cardId === cardId && d.getFullYear() === y && d.getMonth() + 1 === m
+        const [ty, tm] = t.date.split('-').map(Number)
+        return t.cardId === cardId && ty === y && tm === m
       })
       .reduce((sum, t) => sum + t.amount, 0)
 
@@ -445,9 +448,9 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       const total = latest.installment!.total
       const perInstallment = latest.installment!.amountPerInstallment
       if (paidCount >= total) return
-      const ld = new Date(latest.date)
+      const [ly, lm] = latest.date.split('-').map(Number)
       for (let n = 1; n <= total - paidCount; n++) {
-        const due = new Date(ld.getFullYear(), ld.getMonth() + n, 1)
+        const due = new Date(ly, lm - 1 + n, 1)
         const dueKey = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}`
         if (dueKey === monthKey) { installmentTotal += perInstallment; break }
       }
@@ -459,8 +462,8 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
   const getIncomesForMonth = (monthKey: string, userId?: string) => {
     const [y, m] = monthKey.split('-').map(Number)
     return state.incomes.filter((i) => {
-      const d = new Date(i.date)
-      const matches = d.getFullYear() === y && d.getMonth() + 1 === m
+      const [iy, im] = i.date.split('-').map(Number)
+      const matches = iy === y && im === m
       return userId ? matches && i.userId === userId : matches
     })
   }
